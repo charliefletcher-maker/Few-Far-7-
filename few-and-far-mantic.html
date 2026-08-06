@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Few&Far — a forecast of our own</title>
+<style>
+  :root{
+    --bg: #0A0A0C;
+    --panel: #131317;
+    --panel-2: #1A1A1F;
+    --line: rgba(255,255,255,0.10);
+    --ink: #F4F4F5;
+    --muted: #8B8B94;
+    --signal: #C9C4FF;
+    --signal-dim: rgba(201,196,255,0.16);
+    --live: #6FE3B4;
+    --live-dim: rgba(111,227,180,0.16);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding:64px 24px 100px;
+    position:relative;
+    overflow-x:hidden;
+  }
+  .vector-bg{
+    position:fixed;
+    top:-10%; right:-15%;
+    width:900px; height:900px;
+    opacity:0.05;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .wrap{max-width:840px;margin:0 auto;position:relative;z-index:1;}
+
+  .eyebrow{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--signal);
+    margin-bottom:26px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:7px; height:7px;
+    background:var(--signal);
+    box-shadow:0 0 0 4px var(--signal-dim);
+  }
+
+  h1{
+    font-weight:800;
+    font-size:clamp(30px,5vw,50px);
+    line-height:1.1;
+    letter-spacing:-0.02em;
+    margin:0 0 18px;
+    text-transform:uppercase;
+  }
+  h1 span{ color:var(--signal); }
+
+  p.lede{
+    font-size:16px;
+    line-height:1.65;
+    color:var(--muted);
+    max-width:60ch;
+    margin:0 0 8px;
+  }
+  p.lede.small{
+    font-size:13px;
+    color:#6A6A72;
+    margin:0 0 36px;
+  }
+
+  .hud{
+    display:flex;
+    justify-content:space-between;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    letter-spacing:0.05em;
+    color:var(--muted);
+    margin-bottom:16px;
+    text-transform:uppercase;
+  }
+  .hud b{ color:var(--ink); }
+
+  .board{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    margin-bottom:16px;
+  }
+
+  .q{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:20px 22px;
+  }
+
+  .q-title{
+    font-size:15.5px;
+    font-weight:600;
+    line-height:1.4;
+    color:var(--ink);
+    margin-bottom:4px;
+  }
+  .q-tag{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:10px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:16px;
+  }
+
+  .guess-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-bottom:6px;
+  }
+  input[type=range]{
+    flex:1;
+    -webkit-appearance:none;
+    height:5px;
+    border-radius:4px;
+    background:var(--panel-2);
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--ink);
+    cursor:pointer;
+    box-shadow:0 0 0 4px rgba(255,255,255,0.08);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--ink);
+    cursor:pointer;
+    border:none;
+  }
+  .guess-pct{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:15px;
+    font-weight:600;
+    min-width:48px;
+    text-align:right;
+    color:var(--ink);
+  }
+  .guess-label{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:9.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:#5F5F68;
+    margin-bottom:10px;
+  }
+
+  .resolve-btn{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--ink);
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:7px 16px;
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .resolve-btn:hover{ border-color:var(--signal); color:var(--signal); }
+  .q.done .resolve-btn{ display:none; }
+
+  .reveal{
+    max-height:0;
+    overflow:hidden;
+    opacity:0;
+    transition:max-height .32s ease, opacity .24s ease, margin-top .32s ease;
+  }
+  .reveal.open{
+    max-height:280px;
+    opacity:1;
+    margin-top:16px;
+    padding-top:16px;
+    border-top:1px dashed var(--line);
+  }
+
+  .actual-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:10px;
+  }
+  .actual-label{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:10px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .actual-val{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:20px;
+    font-weight:700;
+    color:var(--signal);
+  }
+  .q.live .actual-val{ color:var(--live); }
+
+  .quip{
+    font-size:14.5px;
+    font-style:italic;
+    color:var(--ink);
+    margin-bottom:14px;
+    padding-left:12px;
+    border-left:2px solid var(--signal);
+  }
+  .q.live .quip{ border-left-color:var(--live); }
+
+  .detail-text{
+    font-size:14px;
+    line-height:1.6;
+    color:var(--muted);
+  }
+  .detail-text .k{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:9.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:#5F5F68;
+    display:block;
+    margin-bottom:3px;
+  }
+  .detail-text p{ margin:0 0 10px; }
+  .detail-text a{ color:var(--signal); }
+
+  .adjacent{
+    background:linear-gradient(135deg, rgba(201,196,255,0.06), rgba(111,227,180,0.05));
+    border:1px solid rgba(201,196,255,0.25);
+    border-radius:12px;
+    padding:22px 24px;
+    margin-bottom:36px;
+  }
+  .adjacent-tag{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:10px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--signal);
+    margin-bottom:10px;
+  }
+  .adjacent p{
+    font-size:14.5px;
+    line-height:1.65;
+    color:var(--ink);
+    margin:0;
+  }
+
+  .close{
+    font-size:13.5px;
+    color:var(--muted);
+    line-height:1.7;
+    max-width:58ch;
+  }
+</style>
+</head>
+<body>
+
+<svg class="vector-bg" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="200" cy="200" r="180" fill="none" stroke="white" stroke-width="0.5"/>
+  <circle cx="200" cy="200" r="130" fill="none" stroke="white" stroke-width="0.5"/>
+  <circle cx="200" cy="200" r="80" fill="none" stroke="white" stroke-width="0.5"/>
+  <line x1="20" y1="200" x2="380" y2="200" stroke="white" stroke-width="0.5"/>
+  <line x1="200" y1="20" x2="200" y2="380" stroke="white" stroke-width="0.5"/>
+  <line x1="60" y1="60" x2="340" y2="340" stroke="white" stroke-width="0.3"/>
+  <line x1="340" y1="60" x2="60" y2="340" stroke="white" stroke-width="0.3"/>
+</svg>
+
+<div class="wrap">
+
+  <div class="eyebrow">Few&amp;Far — a forecast of our own</div>
+  <h1>You predict the world.<br><span>Try predicting us.</span></h1>
+  <p class="lede">Set your own probability first, then resolve the question and see how you scored against what actually happened.</p>
+  <p class="lede small">Drag the slider to your guess, then hit Resolve.</p>
+
+  <div class="hud">
+    <span>Board · few-and-far-01</span>
+    <span>Resolved: <b id="count">0</b> / 5 · Live: 1</span>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <div class="adjacent">
+    <div class="adjacent-tag">Adjacent market</div>
+    <p>We're not only adjacent to your hiring, we're adjacent to your work. We're currently helping Artificial Societies build the simulation models behind their platform, the ones predicting what people will think, not just what will happen.</p>
+  </div>
+
+  <div class="close">Reply on LinkedIn if you'd like the source behind any of these, or want to talk through hiring for pre-training, post-training, or simulation.</div>
+
+</div>
+
+<script>
+  const questions = [
+    {
+      title: "Will a Glyphic founder publicly recommend Few&Far, unprompted?",
+      tag: "Referral",
+      actual: 100,
+      live: false,
+      background: "A founder posted about Few&Far with no request to do so.",
+      outcome: "Public post, no incentive attached.",
+      link: "https://www.linkedin.com/posts/dneves_if-you-are-hiring-i-cant-recommend-few-share-7437605762023063555-J-jk"
+    },
+    {
+      title: "Will causalens retain 3 of 3 engineers placed this year?",
+      tag: "Retention",
+      actual: 100,
+      live: false,
+      background: "Three engineers placed this year, tracked through to today.",
+      outcome: "All three, still in seat."
+    },
+    {
+      title: "Will Few&Far place pre-training, post-training, and simulation hires at Artificial Societies?",
+      tag: "Live · In progress",
+      actual: 82,
+      live: true,
+      background: "Currently supporting Artificial Societies across research and engineering hiring, including roles in pre-training, post-training, and simulation.",
+      outcome: "Not yet resolved. Revisit next quarter."
+    },
+    {
+      title: "Will Few&Far deliver Portia AI's full founding engineering team?",
+      tag: "Placement",
+      actual: 100,
+      live: false,
+      background: "Founding engineering team, three engineers, under CEO Emma Burrows.",
+      outcome: "Delivered in full."
+    },
+    {
+      title: "Will Few&Far place Overmind's founding engineer?",
+      tag: "Placement",
+      actual: 100,
+      live: false,
+      background: "Overmind, an AI security company, needed a founding engineer.",
+      outcome: "Placed."
+    },
+    {
+      title: "Will Few&Far be rated 5 stars on Google?",
+      tag: "Sentiment",
+      actual: 100,
+      live: false,
+      background: "Public reviews, aggregated.",
+      outcome: "5.0 out of 5.0.",
+      link: "https://www.google.com/search?q=few%26far+recruitment#lrd=0x487604cd9f70496b:0x26167ab33d074c75,1,,,,"
+    }
+  ];
+
+  function quipFor(guess, actual, live) {
+    const gap = Math.abs(actual - guess);
+    if (live) {
+      if (gap <= 10) return "Reasonable. It's still being written.";
+      if (guess < actual) return "You're underrating a live search. Fair, it's not done yet.";
+      return "Confident. Ask us again next quarter.";
+    }
+    if (gap <= 5) return "Sharp. That's basically calibrated.";
+    if (gap <= 15) return "Not bad, forecaster.";
+    if (gap <= 30) return "You hedged harder than the market did.";
+    return "That's... optimistically wrong.";
+  }
+
+  const board = document.getElementById('board');
+  const counter = document.getElementById('count');
+  let resolvedSet = new Set();
+
+  questions.forEach((q, i) => {
+    const card = document.createElement('div');
+    card.className = 'q' + (q.live ? ' live' : '');
+
+    const title = document.createElement('div');
+    title.className = 'q-title';
+    title.textContent = q.title;
+
+    const tag = document.createElement('div');
+    tag.className = 'q-tag';
+    tag.textContent = q.tag;
+
+    const guessLabel = document.createElement('div');
+    guessLabel.className = 'guess-label';
+    guessLabel.textContent = 'Your estimate';
+
+    const guessRow = document.createElement('div');
+    guessRow.className = 'guess-row';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0'; slider.max = '100'; slider.value = '50';
+    const guessPct = document.createElement('div');
+    guessPct.className = 'guess-pct';
+    guessPct.textContent = '50%';
+    slider.addEventListener('input', () => { guessPct.textContent = slider.value + '%'; });
+    guessRow.appendChild(slider);
+    guessRow.appendChild(guessPct);
+
+    const btnRow = document.createElement('div');
+    const btn = document.createElement('button');
+    btn.className = 'resolve-btn';
+    btn.textContent = 'Resolve';
+
+    const reveal = document.createElement('div');
+    reveal.className = 'reveal';
+
+    btnRow.appendChild(btn);
+
+    card.appendChild(title);
+    card.appendChild(tag);
+    card.appendChild(guessLabel);
+    card.appendChild(guessRow);
+    card.appendChild(btnRow);
+    card.appendChild(reveal);
+
+    btn.addEventListener('click', () => {
+      const guess = parseInt(slider.value, 10);
+      const quip = quipFor(guess, q.actual, q.live);
+      const linkHtml = q.link ? ` <a href="${q.link}" target="_blank" rel="noopener">See source →</a>` : '';
+      reveal.innerHTML = `
+        <div class="actual-row">
+          <span class="actual-label">${q.live ? 'Current estimate' : 'Actual'}</span>
+          <span class="actual-val">${q.actual}%</span>
+        </div>
+        <div class="quip">${quip}</div>
+        <div class="detail-text">
+          <p><span class="k">Background</span>${q.background}</p>
+          <p><span class="k">Outcome</span>${q.outcome}${linkHtml}</p>
+        </div>
+      `;
+      reveal.classList.add('open');
+      card.classList.add('done');
+      slider.disabled = true;
+
+      if (!q.live && !resolvedSet.has(i)) {
+        resolvedSet.add(i);
+        counter.textContent = resolvedSet.size;
+      }
+    });
+
+    board.appendChild(card);
+  });
+</script>
+</body>
+</html>
